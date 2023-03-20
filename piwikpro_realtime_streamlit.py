@@ -10,19 +10,20 @@ from streamlit_javascript import st_javascript
 # STREAMLIT data visualization ----------------------
 
 st.set_page_config(layout="centered",
-                   page_title="Piwik Pro (near)Realtime Analytics")
+                   page_title="PiwikPro Realtime Analytics")
 
 
-now = datetime.datetime.now() - datetime.timedelta(minutes=1)
+now = datetime.datetime.now()
 today_pt = now.strftime("%d-%m-%Y")
 
-st.title(f"Piwik Pro (near)Realtime Analytics")
+st.title(f"PiwikPro Realtime Analytics")
 
 st.sidebar.subheader(
-    "Please insert your Piwik Pro website/app details to generate near realtime data to the App")
+    "Please insert your Piwik Pro website/app and API key details to generate near realtime analytics")
 
 
-@st.cache_data
+# user input with cache functionality to not lose credentials
+@st.cache(allow_output_mutation=True)
 def get_user_input():
     return {
         "piwik_domain": "",
@@ -40,20 +41,26 @@ user_input["website_id"] = st.sidebar.text_input(
     "Website id", user_input["website_id"])
 user_input["client_id"] = st.sidebar.text_input(
     "Client ID", user_input["client_id"])
+
+
 user_input["client_secret"] = st.sidebar.text_input(
     "Client Secret", user_input["client_secret"], type="password")
 
+st.sidebar.markdown(
+    "Please check [PiwikPro Authorization Instructions](https://developers.piwik.pro/en/latest/platform/getting_started.html) on how to get API credentials", unsafe_allow_html=True)
+
+st.sidebar.markdown("Piwik Pro's API allow us to access its raw session and event metrics in near real time. So I bult this app to retrieve (near) real time analytics similarly to Google Analytics. Hope you enjoy!")
 
 st.sidebar.text("Created by João Valente")
 st.sidebar.markdown(
     "[Linkedin](https://www.linkedin.com/in/joao-valente-analytics/)", unsafe_allow_html=True)
 st.sidebar.markdown(
     "[Medium](https://medium.com/@jvanalytics)", unsafe_allow_html=True)
+st.sidebar.markdown(
+    "[Github](https://github.com/jvanalytics)", unsafe_allow_html=True)
 
 st.sidebar.text(f"Version 1.0")
 
-
-# st.header(f'Domain: {piwik_domain}.piwik.pro | Website id: {website_id}')
 
 
 # markdown to change the font size for the metrics
@@ -144,8 +151,6 @@ else:
     now = datetime.datetime.now()
     mins_ago = now - datetime.timedelta(minutes=30)
 
-    token_age = (datetime.datetime.now()-headers_timestamp).total_seconds()
-    print(f'token age is {token_age} seconds')
 
     # --------------------------- Streamlit Data (empty placeholders to be filled later  by on the query api)
 
@@ -158,55 +163,61 @@ else:
 
         st.header("Traffic and Ecommerce")
 
+        st.header("Live")
+
         col1, col2, col3 = st.columns(3)
 
-        st_total_sessions = col1.empty()
-        st_live_sessions = col1.empty()
 
-        st_total_orders = col2.empty()
-        st_live_orders = col2.empty()
-
-        st_total_sales = col3.empty()
-        st_live_sales = col3.empty()
+        st_live_sessions = col1.metric(label="Live Sessions (last 30 mins)",value=0)
+        st_live_orders = col2.metric(label="Live Orders (last 30 mins)",value=0)
+        st_live_revenue = col3.metric(label="Live Revenue (from raw event data)",value=0)
 
         st_live_minutes = st.empty()
 
-        st_live_source = st.empty()
+        st_live_source = st.dataframe()
 
-        st_live_filters = st.empty()
-        st_selected_source_options = st.empty()
-        st_selected_medium_options = st.empty()
-        st_selected_campaign_options = st.empty()
+        st.header("Today's Total")
+
+        col4, col5, col6 = st.columns(3)
+
+        st_total_sessions = col4.metric(label="Today's Total Sessions",value=0)
+        st_total_orders = col5.metric(label="Today's Total Orders",value=0)
+        st_total_revenue = col6.metric(label="Total Revenue (from raw event data)",value=0)
+
+        st_total_sessions_source = st.dataframe()
 
     with tab2:
 
-        st.header("Pageviews")
+        st.header("Live Pageviews")
 
-        col1, col2 = st.columns(2)
-
-        st_total_pageviews = col1.empty()
-        st_total_live_pageviews = col2.empty()
-
+        st_total_live_pageviews = st.metric(label="Total Live Pageviews (last 30 mins)", value=0)
         st_live_pageviews = st.empty()
 
+        st.header("Today's Total Pageviews")
+
+        st_total_pageviews = st.metric("Today's Total Pageviews",value=0)
+        st_table_total_pageviews = st.empty()
+    
     with tab3:
 
-        st.header("Searches")
+        st.header("Live Searches")
 
-        col1, col2 = st.columns(2)
-
-        st_total_searches = col1.empty()
-        st_total_live_searches = col2.empty()
-
+        st_total_live_searches = st.metric(
+            "Total Live Searches (last 30 mins)",value=0)
         st_live_searches = st.empty()
+
+        st.header("Live Searches")
+        st_total_searches = st.metric("Today's Total Searches", value=0)
+
 
     st_spinner = st.empty()
 
-    # ---------------------------  Data API Query Loop--------------------------
+    # ---------------------------  Data API Query --------------------------
 
-    while True & bool(token_age <= 1300):
+    # --------------------------- RAW SESSION DATA -----------------------------
 
-        # --------------------------- RAW SESSION DATA -----------------------------
+    # initialize df_live_minutes here
+    with st.spinner("Data is loading. Event Data may take longer depending on volume 🥵"):
 
         raw_session_query = {
             "relative_date": "today",
@@ -234,126 +245,106 @@ else:
             "limit": 100000,
             "format": "json"
         }
-        with st.spinner("Data is loading. Event Data may take longer depending on volume 🥵"):
 
-            try:
+        try:
 
-                session_data = piwik_query(
-                    raw_session_query, session_query_url)
+            session_data = piwik_query(
+                raw_session_query, session_query_url)
 
-                session_query_columns = [
-                    'session_id',  'visitor_id', 'timestamp']
-                for i in raw_session_query["columns"]:
-                    for v in i.values():
-                        session_query_columns.append(v)
+            session_query_columns = [
+                'session_id',  'visitor_id', 'timestamp']
+            for i in raw_session_query["columns"]:
+                for v in i.values():
+                    session_query_columns.append(v)
 
-                session_data.columns = session_query_columns
+            session_data.columns = session_query_columns
 
-                session_data["timestamp"] = pd.to_datetime(
-                    session_data["timestamp"])
+            session_data["timestamp"] = pd.to_datetime(
+                session_data["timestamp"])
 
-                session_data = session_data.sort_values(
-                    'timestamp', ascending=False)
+            session_data = session_data.sort_values(
+                'timestamp', ascending=False)
 
-                # Define multiselect options
-                st_live_filters.subheader(
-                    f"You can filter the raw session data by source. It will be applied in the data update")
 
-                source_options = session_data['source'].unique().tolist()
-                medium_options = session_data['medium'].unique().tolist()
-                campaign_options = session_data['campaign_name'].unique(
-                ).tolist()
 
-                # Create multiselect filter
-                def get_selected_options():
-                    selected_source_options = st_selected_source_options.multiselect(
-                        'Filter Session data by Source.', source_options)
-                    selected_medium_options = st_selected_medium_options.multiselect(
-                        'Filter Session data by Medium', medium_options)
-                    selected_campaign_options = st_selected_campaign_options.multiselect(
-                        'Filter Session data by Campaign', campaign_options)
-                    return (selected_source_options, selected_medium_options, selected_campaign_options)
+            # ------------------- LIVE session data from timeframe (30 mins)
 
-                # Get the selected filter options
-                selected_source_options, selected_medium_options, selected_campaign_options = get_selected_options()
+            # loc function to retrieve last 30 minutes raw sessions
+            df_live = session_data.loc[session_data["timestamp"].between(
+                mins_ago, now)]
+            
 
-                # Filter session data by selected options
-                if selected_source_options:
-                    session_data = session_data[session_data['source'].isin(
-                        selected_source_options)]
-                if selected_medium_options:
-                    session_data = session_data[session_data['medium'].isin(
-                        selected_medium_options)]
-                if selected_campaign_options:
-                    session_data = session_data[session_data['campaign_name'].isin(
-                        selected_campaign_options)]
-
-                # ------------------- Get today's total orders, sales, sessions
-
-                today_orders = round(
-                    session_data["session_total_ecommerce_conversions"].sum())
-
-                today_sessions = session_data["session_id"].nunique()
-
-                # ------------------- LIVE session data from timeframe (30 mins)
-
-                # loc function to retrieve last 30 minutes raw sessions
-                df_live = session_data.loc[session_data["timestamp"].between(
-                    mins_ago, now)]
-
-                # Total timeframe sessions metric
-                live_sessions = df_live["session_id"].nunique()
-
-                # Total timeframe Session Order Conversions
-                live_orders = df_live["session_total_ecommerce_conversions"].sum(
-                )
-
-                df_live_source = df_live.groupby(["source", "medium", "campaign_name"]).agg(
-                    {"session_id": "count", "session_total_ecommerce_conversions": "sum"}).sort_values("session_id", ascending=False).reset_index()
-
-                df_live_source.rename(columns={
-                    'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
-
-                # dataframe to plot sessions per minute
-                df_live_minutes = df_live[['timestamp', 'session_id']]
-
-                # group the data by minute
-                df_live_minutes = df_live_minutes.groupby(pd.Grouper(
-                    key="timestamp", freq="1Min")).agg({"session_id": "count"}).reset_index()
-
-                # format the "Time" column to show HH:MM
-                df_live_minutes['timestamp'] = df_live_minutes["timestamp"].dt.strftime(
-                    '%H:%M')
-
-                # rename the "session_id" column to "Sessions"
-                df_live_minutes = df_live_minutes.rename(
-                    columns={"timestamp": "Time", "session_id": "Sessions"})
-
-            except Exception as e:
-                print(f"Session Data Error: {e}")
-
-                today_orders = 0
-                today_sessions = 0
-                live_sessions = 0
-                live_orders = 0
-                df_live = None
-                df_live_minutes = None
-                df_live_source = None
-
-            # streamlit metrics amd visualizations
-
-            st_total_orders.metric("Today's Total Orders", today_orders)
-            st_total_sessions.metric("Today's Total Sessions", today_sessions)
+            # Total timeframe sessions metric
+            live_sessions = df_live["session_id"].nunique()
             st_live_sessions.metric(
-                "Live Sessions (last 30 mins)", live_sessions)
+                "Live Sessions (last 30 mins)", live_sessions)            
+
+            # Total timeframe Session Order Conversions
+            live_orders = df_live["session_total_ecommerce_conversions"].sum(
+            )
             st_live_orders.metric("Live Orders (last 30 mins)", live_orders)
+
+
+            df_live_source = df_live.groupby(["source", "medium", "campaign_name"]).agg(
+                {"session_id": "count", "session_total_ecommerce_conversions": "sum"}).sort_values("session_id", ascending=False).reset_index()
+
+            df_live_source.rename(columns={
+                'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
+            
+            
+            df_live_source["conversion rate"]=df_live_source["orders"]/df_live_source["sessions"]*100
+
+
+
+            # dataframe to plot sessions per minute
+            df_live_minutes = df_live[['timestamp', 'session_id']]
+
+            # group the data by minute
+            df_live_minutes = df_live_minutes.groupby(pd.Grouper(
+                key="timestamp", freq="1Min")).agg({"session_id": "count"}).reset_index()
+
+            # format the "Time" column to show HH:MM
+            df_live_minutes['timestamp'] = df_live_minutes["timestamp"].dt.strftime(
+                '%H:%M')
+
+            # # rename the "session_id" column to "Sessions"
+            df_live_minutes = df_live_minutes.rename(
+                columns={"timestamp": "Time", "session_id": "Sessions"})
+                
             st_live_minutes.bar_chart(df_live_minutes, x='Time')
-            st_live_source.dataframe(
-                df_live_source, use_container_width=True)
+            st_live_source.dataframe(df_live_source, use_container_width=True)    
 
-            # ------------------ EVENT DATA ---------------------------------
 
-            raw_event_query = {
+            
+           # ------------------- Get today's total orders, revenue, sessions
+
+            today_orders = round(
+                session_data["session_total_ecommerce_conversions"].sum())
+            
+            st_total_orders.metric("Today's Total Orders", today_orders)
+
+            today_sessions = session_data["session_id"].nunique()
+            st_total_sessions.metric("Today's Total Sessions", today_sessions)
+
+            df_total_source = session_data.groupby(["source", "medium", "campaign_name"]).agg(
+                {"session_id": "count", "session_total_ecommerce_conversions": "sum"}).sort_values("session_id", ascending=False).reset_index()
+
+            df_total_source.rename(columns={
+                'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
+            
+            df_total_source["conversion rate"]=df_total_source["orders"]/df_total_source["sessions"]*100
+
+            st_total_sessions_source.dataframe(df_total_source,use_container_width=True)
+
+
+        except Exception as e:
+            print(f"Session Data Error: {e}")
+            st.error(f"Session Data Error:{e}. Please verify your PiwikPro credentials input.")
+
+
+        # ------------------ EVENT DATA ---------------------------------
+
+        raw_event_query = {
                 "relative_date": "today",
                 "website_id": website_id,
                 "columns": [
@@ -416,121 +407,103 @@ else:
                 "format": "json",
                 "column_format": "name"
             }
+        
+        try:
 
-            try:
+            event_data = piwik_query(raw_event_query, event_query_url)
 
-                event_data = piwik_query(raw_event_query, event_query_url)
+            event_query_columns = ['session_id',
+                                    'event_id', 'visitor_id', 'timestamp']
+            for i in raw_event_query["columns"]:
+                for v in i.values():
+                    event_query_columns.append(v)
 
-                event_query_columns = ['session_id',
-                                       'event_id', 'visitor_id', 'timestamp']
-                for i in raw_event_query["columns"]:
-                    for v in i.values():
-                        event_query_columns.append(v)
+            event_data.columns = event_query_columns
 
-                event_data.columns = event_query_columns
+            event_data["timestamp"] = pd.to_datetime(
+                event_data["timestamp"])
 
-                event_data["timestamp"] = pd.to_datetime(
-                    event_data["timestamp"])
+            # event_type has a list type column. this splits it into two different columns and drops the original afterwards
+            event_data[['event_type_id', 'event_type_name']
+                        ] = event_data['event_type'].apply(lambda x: pd.Series([x[0], x[1]]))
 
-                # event_type has a list type column. this splits it into two different columns and drops the original afterwards
-                event_data[['event_type_id', 'event_type_name']
-                           ] = event_data['event_type'].apply(lambda x: pd.Series([x[0], x[1]]))
+            event_data.drop(columns=['event_type'], inplace=True)
 
-                event_data.drop(columns=['event_type'], inplace=True)
+            # # Total Ecommerce Revenue from today
+            total_revenue = round(event_data['revenue'].sum(), 2)
+            st_total_revenue.metric("Total Revenue €,$...", total_revenue)            
 
-                # # Total searches today
-                df_searches = event_data[event_data['event_type_id'] == 4]
+            # # Total searches today
+            df_searches = event_data[event_data['event_type_id'] == 4]
 
-                total_searches = df_searches['visitor_id'].nunique()
+            total_searches = df_searches['visitor_id'].nunique()
+            st_total_searches.metric("Today's Total Searches", total_searches)
 
-                # # Total pageviews today
-                df_pageviews = event_data[event_data['event_type_id'] == 1]
+            # # Total pageviews today
+            df_pageviews = event_data[event_data['event_type_id'] == 1]
 
-                total_pageviews = df_pageviews['visitor_id'].nunique()
+            total_pageviews = df_pageviews['visitor_id'].nunique()
+            st_total_pageviews.metric("Today's Total Pageviews", total_pageviews)
 
-                # # Total Ecommerce Sales from today
-                total_sales = round(event_data['revenue'].sum(), 2)
 
-                # live events from 30 minutes ago
-                df_live_events = event_data.loc[event_data["timestamp"].between(
-                    mins_ago, now)]
+            # live events from 30 minutes ago
+            df_live_events = event_data.loc[event_data["timestamp"].between(
+                mins_ago, now)]
 
-                # live sales from 30 minutes ago
-                df_total_live_sales = round(df_live_events['revenue'].sum(), 2)
+            # live revenue from 30 minutes ago
+            df_total_live_revenue = round(df_live_events['revenue'].sum(), 2)
+            st_live_revenue.metric(
+            "Live Revenue (last 30 mins) €,$...", df_total_live_revenue)
 
-                # live searches
-                df_live_searches = df_live_events[df_live_events['event_type_id'] == 4].groupby(
-                    'search_keyword')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+            # live searches
+            df_live_searches = df_live_events[df_live_events['event_type_id'] == 4].groupby(
+                'search_keyword')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
 
-                # live searches table
-                df_live_searches = df_live_searches.rename(
-                    columns={"visitor_id": "unique_searches"})
+            # live searches table
+            df_live_searches = df_live_searches.rename(
+                columns={"visitor_id": "unique_searches"})
 
-                # total live searches
-                df_total_live_searches = df_live_searches['unique_searches'].sum(
-                )
+            # total live searches
+            df_total_live_searches = df_live_searches['unique_searches'].sum()
+            st_total_live_searches.metric(
+            "Total Live Searches (last 30 mins)", df_total_live_searches)
+    
+            st_live_searches.dataframe(df_live_searches, use_container_width=True)
+    
+    
+            # live pageviews table
+            df_live_pageviews = df_live_events[df_live_events['event_type_id'] == 1].groupby(
+                'event_url')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
 
-                # live pageviews
+            df_live_pageviews = df_live_pageviews.rename(
+                columns={"event_url": "url", "visitor_id": "pageviews"})
 
-                # live pageviews table
-                df_live_pageviews = df_live_events[df_live_events['event_type_id'] == 1].groupby(
-                    'event_url')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+            # total live pageviews
+            df_total_live_pageviews = df_live_pageviews['pageviews'].sum()
+            st_total_live_pageviews.metric(
+            "Total Live Pageviews (last 30 mins)", df_total_live_pageviews)
 
-                df_live_pageviews = df_live_pageviews.rename(
-                    columns={"event_url": "url", "visitor_id": "pageviews"})
+            st_live_pageviews.dataframe(df_live_pageviews, use_container_width=True)
 
-                # total live pageviews
-                df_total_live_pageviews = df_live_pageviews['pageviews'].sum()
 
-            except Exception as e:
-                print(f"Event Data Error: {e}")
-                df_pageviews = None
-                df_searches = None
-                total_pageviews = None
-                total_sales = 0
-                total_searches = 0
-                df_live_searches = None
-                df_total_live_searches = 0
-                df_live_pageviews = None
-                df_total_live_pageviews = 0
-                df_total_live_sales = 0
+        except Exception as e:
+            print(f"Event Data Error: {e}")
+            st.error(f"Event Data Error:{e}. Please verify your PiwikPro credentials input.")
 
-        # streamlit events metrics and visualizations
-        st_total_sales.metric("Total Sales (from raw event data)", total_sales)
-        st_live_sales.metric(
-            "Total Live Sales (from raw event data)", df_total_live_sales)
 
-        st_total_pageviews.metric("Total Pageviews", total_pageviews)
-        st_total_searches.metric("Total Searches", total_searches)
+    now_update = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    st_spinner.success(
+        f"Data Loaded at {now_update}! Refreshes in 5 minutes", icon="✅")
+    
+    sleep = 300
 
-        st_total_live_pageviews.metric(
-            "Total Live Pageviews", df_total_live_pageviews)
-        st_live_pageviews.dataframe(
-            df_live_pageviews, use_container_width=True)
+    time.sleep(sleep)
+    print(f"data refreshes in {sleep} secs")
 
-        st_total_live_searches.metric(
-            "Total Live Searches", df_total_live_searches)
-        st_live_searches.dataframe(df_live_searches, use_container_width=True)
 
-        now_update = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        sleep = 60
-
-        st_spinner.success(
-            f"Data Loaded at {now_update}! Refreshes in {sleep} seconds", icon="✅")
-
-        time.sleep(sleep)
-        print(f"data refreshes in {sleep} secs")
-
-        token_age = (datetime.datetime.now()-headers_timestamp).total_seconds()
-        print(f'token age is {token_age} seconds')
-
-    print("token expired. while loop ended")
-
-    # https://pypi.org/project/streamlit-javascript/
-    # https://stackoverflow.com/a/32913581/16129184
-    # automated script to refresh page 600000 ms = 1 min after the token expires and the while loop ends
+    # automated javascript function to refresh page after the token expires and the while loop ends
+    # 60000 ms = 1 min 
 
     st_javascript("""window.setTimeout( function() {
     window.location.reload();
-    }, 60000);""")
+    }, 300000);""")
