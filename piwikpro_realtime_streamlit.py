@@ -19,8 +19,7 @@ today_pt = now.strftime("%d-%m-%Y")
 st.title(f"PiwikPro Realtime Analytics")
 
 st.sidebar.subheader(
-    "Please insert your Piwik Pro website/app and API key details to generate near realtime analytics")
-
+    "Please insert your Piwik Pro website/app and API key details")
 
 # user input with cache functionality to not lose credentials
 @st.cache(allow_output_mutation=True)
@@ -42,16 +41,13 @@ user_input["website_id"] = st.sidebar.text_input(
 user_input["client_id"] = st.sidebar.text_input(
     "Client ID", user_input["client_id"])
 
-
 user_input["client_secret"] = st.sidebar.text_input(
     "Client Secret", user_input["client_secret"], type="password")
 
 st.sidebar.markdown(
-    "Please check [PiwikPro Authorization Instructions](https://developers.piwik.pro/en/latest/platform/getting_started.html) on how to get API credentials", unsafe_allow_html=True)
+    "Piwik Pro's API allow us to access its raw session and event metrics in near real time. Official PiwikPro instructions for [Website Id](https://help.piwik.pro/support/questions/find-website-id/) and [Client Id / Secret](https://developers.piwik.pro/en/latest/platform/getting_started.html)", unsafe_allow_html=True)
 
-st.sidebar.markdown("Piwik Pro's API allow us to access its raw session and event metrics in near real time. So I bult this app to retrieve (near) real time analytics similarly to Google Analytics. Hope you enjoy!")
-
-st.sidebar.text("Created by João Valente")
+st.sidebar.text("Created by João Valente. Enjoy!")
 st.sidebar.markdown(
     "[Linkedin](https://www.linkedin.com/in/joao-valente-analytics/)", unsafe_allow_html=True)
 st.sidebar.markdown(
@@ -161,12 +157,9 @@ else:
 
     with tab1:
 
-        st.header("Traffic and Ecommerce")
-
-        st.header("Live")
+        st.header("Live Traffic and Ecommerce")
 
         col1, col2, col3 = st.columns(3)
-
 
         st_live_sessions = col1.metric(label="Live Sessions (last 30 mins)",value=0)
         st_live_orders = col2.metric(label="Live Orders (last 30 mins)",value=0)
@@ -176,7 +169,7 @@ else:
 
         st_live_source = st.dataframe()
 
-        st.header("Today's Total")
+        st.header("Today's Total Traffic and Ecommerce")
 
         col4, col5, col6 = st.columns(3)
 
@@ -206,9 +199,9 @@ else:
             "Total Live Searches (last 30 mins)",value=0)
         st_live_searches = st.empty()
 
-        st.header("Live Searches")
+        st.header("Today's Total Searches")
         st_total_searches = st.metric("Today's Total Searches", value=0)
-
+        st_table_total_searches=st.empty()
 
     st_spinner = st.empty()
 
@@ -292,7 +285,7 @@ else:
                 'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
             
             
-            df_live_source["conversion rate"]=df_live_source["orders"]/df_live_source["sessions"]*100
+            df_live_source[r"% conversion rate"]=df_live_source["orders"]/df_live_source["sessions"]*100
 
 
 
@@ -332,7 +325,7 @@ else:
             df_total_source.rename(columns={
                 'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
             
-            df_total_source["conversion rate"]=df_total_source["orders"]/df_total_source["sessions"]*100
+            df_total_source[r"% conversion rate"]=df_total_source["orders"]/df_total_source["sessions"]*100
 
             st_total_sessions_source.dataframe(df_total_source,use_container_width=True)
 
@@ -429,15 +422,16 @@ else:
 
             event_data.drop(columns=['event_type'], inplace=True)
 
-            # # Total Ecommerce Revenue from today
+
+
+            # Total Ecommerce Revenue from today
             total_revenue = round(event_data['revenue'].sum(), 2)
             st_total_revenue.metric("Total Revenue €,$...", total_revenue)            
 
-            # # Total searches today
-            df_searches = event_data[event_data['event_type_id'] == 4]
+            # ------------- live events from 30 minutes ago
+            df_live_events = event_data.loc[event_data["timestamp"].between(
+                mins_ago, now)]
 
-            total_searches = df_searches['visitor_id'].nunique()
-            st_total_searches.metric("Today's Total Searches", total_searches)
 
             # # Total pageviews today
             df_pageviews = event_data[event_data['event_type_id'] == 1]
@@ -445,10 +439,32 @@ else:
             total_pageviews = df_pageviews['visitor_id'].nunique()
             st_total_pageviews.metric("Today's Total Pageviews", total_pageviews)
 
+            # total daily table pageviews
+            df_pageviews = df_pageviews.groupby(
+                'event_url')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+            df_pageviews = df_pageviews.rename(
+                columns={"event_url": "url", "visitor_id": "pageviews"})
+            st_table_total_pageviews.dataframe(df_pageviews,use_container_width=True)
 
-            # live events from 30 minutes ago
-            df_live_events = event_data.loc[event_data["timestamp"].between(
-                mins_ago, now)]
+
+
+            # Total searches today
+            df_searches = event_data[event_data['event_type_id'] == 4]
+
+            total_searches = df_searches['visitor_id'].nunique()
+            st_total_searches.metric("Today's Total Searches", total_searches)
+
+            # total daily table searches
+            df_searches = df_searches.groupby(
+                'search_keyword')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+            df_searches = df_searches.rename(
+                columns={"visitor_id": "unique_searches"})
+
+
+            st_table_total_searches.dataframe(df_searches,use_container_width=True)
+
+
+
 
             # live revenue from 30 minutes ago
             df_total_live_revenue = round(df_live_events['revenue'].sum(), 2)
