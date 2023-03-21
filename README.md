@@ -8,10 +8,12 @@ PiwikPro HTTP API Documentation: https://developers.piwik.pro/en/latest/custom_r
 
 By inserting the website details and API credentials you can access near realtime metrics:
 
-![image](https://user-images.githubusercontent.com/93225097/226582494-7eef583e-6cac-45b5-97ea-b27b2f052cb0.png)
+![realtime piwikpro](https://user-images.githubusercontent.com/93225097/226586299-a16f435e-6172-4480-89ec-2a25b78e3353.png)
+
+
 
 Instructions on retrieving the Website Id: https://help.piwik.pro/support/questions/find-website-id/ 
-
 Instructions on retrieving the Client Id and Secret: https://developers.piwik.pro/en/latest/platform/getting_started.html
 
+![image](https://user-images.githubusercontent.com/93225097/226582494-7eef583e-6cac-45b5-97ea-b27b2f052cb0.png)
 
