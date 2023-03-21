@@ -19,20 +19,29 @@ today_pt = now.strftime("%d-%m-%Y")
 st.title(f"PiwikPro Realtime Analytics")
 
 st.sidebar.subheader(
-    "Please insert your Piwik Pro website/app and API key details")
+    "Please insert your Piwik Pro website/app and API key details and data requests.")
 
-# user input with cache functionality to not lose credentials
-@st.cache(allow_output_mutation=True)
+# user input with cache functionality to not lose credentials. it is reset in 3 hours to not break streamlit memory
+@st.cache(allow_output_mutation=True,max_entries=18,ttl=3600*3)
 def get_user_input():
     return {
         "piwik_domain": "",
         "website_id": "",
         "client_id": "",
         "client_secret": "",
+        "total_sessions":"",
+        "total_pageviews":"",
+        "total_searches":""
     }
 
 
 user_input = get_user_input()
+
+
+user_input["total_sessions"]=st.sidebar.checkbox("Total Daily Sessions?")
+user_input["total_pageviews"]=st.sidebar.checkbox("Total Daily Pageviews?")
+user_input["total_searches"]=st.sidebar.checkbox("Total Daily Searches?")
+
 
 user_input["piwik_domain"] = st.sidebar.text_input(
     "Piwik Domain (from domain.piwik.pro)", user_input["piwik_domain"])
@@ -45,7 +54,7 @@ user_input["client_secret"] = st.sidebar.text_input(
     "Client Secret", user_input["client_secret"], type="password")
 
 st.sidebar.markdown(
-    "Piwik Pro's API allow us to access its raw session and event metrics in near real time. Official PiwikPro instructions for [Website Id](https://help.piwik.pro/support/questions/find-website-id/) and [Client Id / Secret](https://developers.piwik.pro/en/latest/platform/getting_started.html)", unsafe_allow_html=True)
+    "Piwik Pro's API allow us to access its raw session and event metrics in near real time. Official PiwikPro instructions for getting [Website Id](https://help.piwik.pro/support/questions/find-website-id/) and [Client Id / Secret](https://developers.piwik.pro/en/latest/platform/getting_started.html). Cache, refresh rate and options are limited in order to not break Streamlit's memory.", unsafe_allow_html=True)
 
 st.sidebar.text("Created by João Valente. Enjoy!")
 st.sidebar.markdown(
@@ -169,15 +178,16 @@ else:
 
         st_live_source = st.dataframe()
 
-        st.header("Today's Total Traffic and Ecommerce")
+        if user_input["total_sessions"]: 
+            st.header("Today's Total Traffic and Ecommerce")
 
-        col4, col5, col6 = st.columns(3)
+            col4, col5, col6 = st.columns(3)
 
-        st_total_sessions = col4.metric(label="Today's Total Sessions",value=0)
-        st_total_orders = col5.metric(label="Today's Total Orders",value=0)
-        st_total_revenue = col6.metric(label="Total Revenue (from raw event data)",value=0)
+            st_total_sessions = col4.metric(label="Today's Total Sessions",value=0)
+            st_total_orders = col5.metric(label="Today's Total Orders",value=0)
+            st_total_revenue = col6.metric(label="Total Revenue (from raw event data)",value=0)
 
-        st_total_sessions_source = st.dataframe()
+            st_total_sessions_source = st.dataframe()
 
     with tab2:
 
@@ -186,10 +196,12 @@ else:
         st_total_live_pageviews = st.metric(label="Total Live Pageviews (last 30 mins)", value=0)
         st_live_pageviews = st.empty()
 
-        st.header("Today's Total Pageviews")
+        if user_input["total_pageviews"]:
 
-        st_total_pageviews = st.metric("Today's Total Pageviews",value=0)
-        st_table_total_pageviews = st.empty()
+            st.header("Today's Total Pageviews")
+
+            st_total_pageviews = st.metric("Today's Total Pageviews",value=0)
+            st_table_total_pageviews = st.empty()
     
     with tab3:
 
@@ -199,9 +211,10 @@ else:
             "Total Live Searches (last 30 mins)",value=0)
         st_live_searches = st.empty()
 
-        st.header("Today's Total Searches")
-        st_total_searches = st.metric("Today's Total Searches", value=0)
-        st_table_total_searches=st.empty()
+        if user_input["total_searches"]:
+            st.header("Today's Total Searches")
+            st_total_searches = st.metric("Today's Total Searches", value=0)
+            st_table_total_searches=st.empty()
 
     st_spinner = st.empty()
 
@@ -311,23 +324,24 @@ else:
             
            # ------------------- Get today's total orders, revenue, sessions
 
-            today_orders = round(
-                session_data["session_total_ecommerce_conversions"].sum())
-            
-            st_total_orders.metric("Today's Total Orders", today_orders)
+            if user_input["total_sessions"]:
+                today_orders = round(
+                    session_data["session_total_ecommerce_conversions"].sum())
+                
+                st_total_orders.metric("Today's Total Orders", today_orders)
 
-            today_sessions = session_data["session_id"].nunique()
-            st_total_sessions.metric("Today's Total Sessions", today_sessions)
+                today_sessions = session_data["session_id"].nunique()
+                st_total_sessions.metric("Today's Total Sessions", today_sessions)
 
-            df_total_source = session_data.groupby(["source", "medium", "campaign_name"]).agg(
-                {"session_id": "count", "session_total_ecommerce_conversions": "sum"}).sort_values("session_id", ascending=False).reset_index()
+                df_total_source = session_data.groupby(["source", "medium", "campaign_name"]).agg(
+                    {"session_id": "count", "session_total_ecommerce_conversions": "sum"}).sort_values("session_id", ascending=False).reset_index()
 
-            df_total_source.rename(columns={
-                'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
-            
-            df_total_source[r"% conversion rate"]=df_total_source["orders"]/df_total_source["sessions"]*100
+                df_total_source.rename(columns={
+                    'session_id': 'sessions', 'session_total_ecommerce_conversions': 'orders'}, inplace=True)
+                
+                df_total_source[r"% conversion rate"]=df_total_source["orders"]/df_total_source["sessions"]*100
 
-            st_total_sessions_source.dataframe(df_total_source,use_container_width=True)
+                st_total_sessions_source.dataframe(df_total_source,use_container_width=True)
 
 
         except Exception as e:
@@ -423,45 +437,50 @@ else:
             event_data.drop(columns=['event_type'], inplace=True)
 
 
-
-            # Total Ecommerce Revenue from today
-            total_revenue = round(event_data['revenue'].sum(), 2)
-            st_total_revenue.metric("Total Revenue €,$...", total_revenue)            
+            if user_input["total_sessions"]:
+                # Total Ecommerce Revenue from today
+                total_revenue = round(event_data['revenue'].sum(), 2)
+                st_total_revenue.metric("Total Revenue €,$...", total_revenue)            
 
             # ------------- live events from 30 minutes ago
             df_live_events = event_data.loc[event_data["timestamp"].between(
                 mins_ago, now)]
 
 
-            # # Total pageviews today
-            df_pageviews = event_data[event_data['event_type_id'] == 1]
 
-            total_pageviews = df_pageviews['visitor_id'].nunique()
-            st_total_pageviews.metric("Today's Total Pageviews", total_pageviews)
 
-            # total daily table pageviews
-            df_pageviews = df_pageviews.groupby(
-                'event_url')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
-            df_pageviews = df_pageviews.rename(
-                columns={"event_url": "url", "visitor_id": "pageviews"})
-            st_table_total_pageviews.dataframe(df_pageviews,use_container_width=True)
+            if user_input["total_pageviews"]:
+                # Total pageviews today
+                df_pageviews = event_data[event_data['event_type_id'] == 1]
+
+                total_pageviews = df_pageviews['visitor_id'].nunique()
+                st_total_pageviews.metric("Today's Total Pageviews", total_pageviews)
+
+                # total daily table pageviews
+                df_pageviews = df_pageviews.groupby(
+                    'event_url')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+                df_pageviews = df_pageviews.rename(
+                    columns={"event_url": "url", "visitor_id": "pageviews"})
+                st_table_total_pageviews.dataframe(df_pageviews,use_container_width=True)
 
 
 
             # Total searches today
-            df_searches = event_data[event_data['event_type_id'] == 4]
+            if user_input["total_searches"]:
 
-            total_searches = df_searches['visitor_id'].nunique()
-            st_total_searches.metric("Today's Total Searches", total_searches)
+                df_searches = event_data[event_data['event_type_id'] == 4]
 
-            # total daily table searches
-            df_searches = df_searches.groupby(
-                'search_keyword')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
-            df_searches = df_searches.rename(
-                columns={"visitor_id": "unique_searches"})
+                total_searches = df_searches['visitor_id'].nunique()
+                st_total_searches.metric("Today's Total Searches", total_searches)
+
+                # total daily table searches
+                df_searches = df_searches.groupby(
+                    'search_keyword')['visitor_id'].nunique().sort_values(ascending=False).reset_index()
+                df_searches = df_searches.rename(
+                    columns={"visitor_id": "unique_searches"})
 
 
-            st_table_total_searches.dataframe(df_searches,use_container_width=True)
+                st_table_total_searches.dataframe(df_searches,use_container_width=True)
 
 
 
@@ -509,9 +528,9 @@ else:
 
     now_update = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     st_spinner.success(
-        f"Data Loaded at {now_update}! Refreshes in 5 minutes", icon="✅")
+        f"Data Loaded at {now_update}! It will automatically refresh in 10 minutes.", icon="✅")
     
-    sleep = 300
+    sleep = 600
 
     time.sleep(sleep)
     print(f"data refreshes in {sleep} secs")
@@ -522,4 +541,4 @@ else:
 
     st_javascript("""window.setTimeout( function() {
     window.location.reload();
-    }, 300000);""")
+    }, 60000);""")
