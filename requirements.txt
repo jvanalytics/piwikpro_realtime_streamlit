@@ -1,5 +1,5 @@
 requests
 pandas>=1.4.0
 datetime
-streamlit>=1.14.0
+streamlit>=1.20.0
 streamlit_javascript >=0.1.5
