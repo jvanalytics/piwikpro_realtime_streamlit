@@ -22,7 +22,7 @@ st.sidebar.subheader(
     "Please insert your Piwik Pro website/app and API key details and data requests.")
 
 # user input with cache functionality to not lose credentials. it is reset in 3 hours to not break streamlit memory
-@st.cache(allow_output_mutation=True,max_entries=18,ttl=3600*3)
+@st.cache_resource(allow_output_mutation=True,max_entries=18,ttl=3600*3)
 def get_user_input():
     return {
         "piwik_domain": "",
